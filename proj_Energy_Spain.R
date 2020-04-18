@@ -1,6 +1,6 @@
 # https://www.kaggle.com/manualrg/spanish-electricity-market-demand-gen-price/download/spanish-electricity-market-demand-gen-price.zip
 
-git <- "https://raw.githubusercontent.com/stchkir/Energy_Spain/master/spain_energy_market.csv"
+git <- "https://raw.githubusercontent.com/stchkir/Energy_Spain/master/data/spain_energy_market.csv"
 temp <- tempfile()
 download.file(git,temp)
 energy_data <- read.csv(temp,sep=",")

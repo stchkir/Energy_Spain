@@ -204,10 +204,17 @@ model_data <- model_data %>% left_join(bias_day, by="wday") %>%
 
 RMSE(model_data$spot_price_ESP,model_data$price_day)
 
+# Show predicted prices
 model_data %>% 
   ggplot(aes(datetime, spot_price_ESP)) +
   geom_point() +
   geom_line(aes(datetime,price_day),col="blue")
+
+# Show differences between actual and predicted prices
+model_data %>% mutate(price_error=price_day-spot_price_ESP) %>% 
+  ggplot(aes(datetime, price_error)) +
+  geom_point() +
+  geom_smooth()
 
 ### Results -----
 

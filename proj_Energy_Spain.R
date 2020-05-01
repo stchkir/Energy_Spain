@@ -209,26 +209,38 @@ RMSE_model <- rbind(RMSE_model,
                                accuracy=RMSE(model_data$spot_price_ESP,
                                              model_data$price_month)))
 
+# Calculate bias by calendar week
+bias_week <- model_data %>% group_by(week) %>% 
+  summarise(bias_w=mean(spot_price_ESP-price_regline,na.rm=TRUE))
+
+model_data <- model_data %>% left_join(bias_week, by="week") %>%
+  mutate(price_week=price_regline+bias_w)
+
+RMSE_model <- rbind(RMSE_model,
+                    data.frame(method="regline+bias by calendar week",
+                               accuracy=RMSE(model_data$spot_price_ESP,
+                                             model_data$price_week)))
+
 # Calculate bias by weekday
-bias_day <- model_data %>% group_by(wday) %>% 
+bias_wday <- model_data %>% group_by(wday) %>% 
   summarise(bias_d=mean(spot_price_ESP-price_month,na.rm=TRUE))
 
-model_data <- model_data %>% left_join(bias_day, by="wday") %>%
-  mutate(price_day=price_regline+bias_m+bias_d)
+model_data <- model_data %>% left_join(bias_wday, by="wday") %>%
+  mutate(price_wday=price_regline+bias_m+bias_d)
 
 RMSE_model <- rbind(RMSE_model,
                     data.frame(method="regline+monthly and daily bias",
                                accuracy=RMSE(model_data$spot_price_ESP,
-                                             model_data$price_day)))
+                                             model_data$price_wday)))
 
 # Show predicted prices
 model_data %>% 
   ggplot(aes(datetime, spot_price_ESP)) +
   geom_point() +
-  geom_line(aes(datetime,price_day),col="blue")
+  geom_line(aes(datetime,price_wday),col="blue")
 
 # Show differences between actual and predicted prices
-model_data %>% mutate(price_error=price_day-spot_price_ESP) %>% 
+model_data %>% mutate(price_error=price_wday-spot_price_ESP) %>% 
   ggplot(aes(datetime, price_error)) +
   geom_point() +
   geom_smooth()
@@ -257,16 +269,24 @@ price_hw_validation <- data.frame(date=as.Date(yearmon(time(ts_price_hw$mean))),
 model_data <- model_data %>% left_join(price_hw_model,by=c("year","month"))
 
 RMSE_model <- rbind(RMSE_model,
-                    data.frame(method="hw",
+                    data.frame(method="hw by month",
                                accuracy=RMSE(model_data$price_hw,
                                              model_data$spot_price_ESP)))
+
+# Calculate bias by weekday on top of Holt Winters
+model_data <- model_data %>% mutate(price_hw_wday=price_hw+bias_d)
+
+RMSE_model <- rbind(RMSE_model,
+                    data.frame(method="hw by month+daily bias",
+                               accuracy=RMSE(model_data$spot_price_ESP,
+                                             model_data$price_hw_wday)))
 
 # Show predicted prices
 model_data %>% 
   ggplot(aes(datetime, spot_price_ESP)) +
   geom_point() +
-  geom_line(aes(datetime,price_day),col="blue") +
-  geom_line(aes(datetime,price_hw),col="red")
+  geom_line(aes(datetime,price_wday),col="blue") +
+  geom_line(aes(datetime,price_hw_wday),col="red")
 
 ### Results -----
 
@@ -294,27 +314,43 @@ RMSE_validation <- rbind(RMSE_validation,
                                   accuracy=RMSE(validation_data$price_month,
                                                 validation_data$spot_price_ESP)))
 
+# Include bias by calendar week
+validation_data <- validation_data %>% left_join(bias_week, by="week") %>%
+  mutate(price_week=price_regline+bias_w)
+
+RMSE_validation <- rbind(RMSE_validation,
+                         data.frame(method="regline+bias by calendar week",
+                                    accuracy=RMSE(validation_data$price_week,
+                                                  validation_data$spot_price_ESP)))
 # Include daily bias in prediction
-validation_data <- validation_data %>% left_join(bias_day, by="wday") %>%
-  mutate(price_day=price_regline+bias_m+bias_d)
+validation_data <- validation_data %>% left_join(bias_wday, by="wday") %>%
+  mutate(price_wday=price_regline+bias_m+bias_d)
 
 RMSE_validation <- rbind(RMSE_validation,
                        data.frame(method="regline+monthly and daily bias",
-                                  accuracy=RMSE(validation_data$price_day,
+                                  accuracy=RMSE(validation_data$price_wday,
                                                 validation_data$spot_price_ESP)))
 
 # Use Holt Winters smoothing for prediction
 validation_data <- validation_data %>% left_join(price_hw_validation,by=c("year","month"))
 
 RMSE_validation <- rbind(RMSE_validation,
-                    data.frame(method="hw",
+                    data.frame(method="hw by month",
                                accuracy=RMSE(validation_data$price_hw,
                                              validation_data$spot_price_ESP)))
+
+# Add daily bias to Holt Winters prediction
+validation_data <- validation_data %>% mutate(price_hw_wday=price_hw+bias_d)
+
+RMSE_validation <- rbind(RMSE_validation,
+                    data.frame(method="hw by month+daily bias",
+                               accuracy=RMSE(validation_data$spot_price_ESP,
+                                             validation_data$price_hw_wday)))
 
 # Show predicted prices
 validation_data %>% 
   ggplot(aes(datetime, spot_price_ESP)) +
   geom_point() +
-  geom_line(aes(datetime,price_day),col="blue") +
-  geom_line(aes(datetime,price_hw),col="red")
+  geom_line(aes(datetime,price_wday),col="blue") +
+  geom_line(aes(datetime,price_hw_wday),col="red")
 

@@ -18,6 +18,8 @@ if (!require("corrplot")) install.packages("corrplot")
 if (!require("RColorBrewer")) install.packages("RColorBrewer")
 if (!require("forecast")) install.packages("forecast")
 if (!require("zoo")) install.packages("forecast")
+if (!require("knitr")) install.packages("knitr")
+if (!require("kableExtra")) install.packages("kableExtra")
 
 library("lubridate")
 library("tidyverse")
@@ -26,6 +28,8 @@ library("corrplot")
 library("RColorBrewer")
 library("forecast")
 library("zoo")
+library("knitr")
+library("kableExtra")
 
 ####### Data Cleaning #######
 
@@ -41,7 +45,7 @@ energy_data <- energy_data %>% mutate(year=year(datetime), month=month(datetime)
 table(energy_data$year,energy_data$geoname)
 
 ### Clean up dublicates of spot prices
-energy_data %>% filter(id==600) %>% arrange(datetime) %>% head(15)
+energy_data %>% filter(id==600) %>% arrange(datetime) %>% head(12)
 
 energy_data <- energy_data %>% filter(name!="") # remove rows without name variable
 table(energy_data$year,energy_data$geoname)

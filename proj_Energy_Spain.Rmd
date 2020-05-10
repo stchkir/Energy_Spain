@@ -45,16 +45,19 @@ library("knitr")
 # Methods/Analysis
 ## A methods/analysis section that explains the process and techniques used, including data cleaning, data exploration and visualization, any insights gained, and your modeling approach. At least two different models or algorithms must be used, with at least one being more advanced than simple linear regression for prediction problems.
 
+## Data Cleaning and Preparation
 The dataset contains six variables, as seen in the following table. Data is reported in a daily frequency, in this case the Spanish electricity spot market price in Spain.
+
 ```{r head_data, echo=FALSE}
 head(energy_data) %>% kable()
 ```
 
 The structure of the data can be better understood when filtering for the first reporting date. For each date various parameters are reported in a tidy format, specified in the column *name*. The Spanish spot market price is reported together with the Portuguese and French electricity spot market prices (in EUR/MWh). It also contains the expected energy demand and the energy generation plan in Spain, split by energy source (in MWh). Finally it contains data on the trading between markets, i.e. the energy that is assigned to Spain and France on the following day, and the energy export and import from and to France and Portugal (in MWh). The value for each is reported in the column *value*.
 
-It can be seen that each parameter is assigned to an unique *ID*. Only the spot market prices for Spain, France and Portgual use the same ID 600. These are differentiated via the variables *geoid* and *geoname*, which are directly linked. Both parameters are only defined for the spot market prices, to differentiate between markets.
+It can be seen that each parameter is assigned to an unique *id*. Only the spot market prices for Spain, France and Portgual use the same ID 600. These are differentiated via the variables *geoid* and *geoname*, which are directly linked. Both parameters are only defined for the spot market prices, to differentiate between markets.
 
 Finally it can be seen that the spot market prices are dublicated. Once without a parameter indicated in column *name* and once with the *name* parameter specified.
+
 ```{r dublicates, echo=FALSE}
 ### Change time to datetime format
 energy_data$datetime <- as_datetime(energy_data$datetime)
@@ -68,7 +71,8 @@ select(-datetime,-year,-month,-week,-wday,-hour) %>%
 mutate(value=round(value,2)) %>% kable()
 ```
 
-The dataset was then prepared for further processing. The *datetime* variable was changed to a **dateime** format. Additional variables were added, indicating the *year*, *month*, *week*, weekday (*wday*) and *hour*. Then dublicates for the spot market prices were eliminated by removing empty rows in the column *name*. The variables in the column *name* were then renamed, using English terms (*key*). Finally the parameters in the column *key* were spread to columns to have one date point per day. Like this correlations between spot market prices and generation and demand data could be analyzed.
+The dataset was then prepared for further processing. The *datetime* variable was changed to a datetime format. Additional variables were added, indicating the *year*, *month*, *week*, weekday (*wday*) and *hour*. Then dublicates for the spot market prices were eliminated by removing empty rows in the column *name*. The variables in the column *name* were then renamed, using English terms (*key*). Finally the parameters in the column *key* were spread to columns to have one date point per day. Like this correlations between spot market prices and generation and demand data could be analyzed.
+
 ```{r data_cleaning, include=FALSE}
 ### Clean up dublicates of spot prices
 energy_data <- energy_data %>% filter(name!="") # remove rows without name variable
@@ -110,19 +114,23 @@ energy_data <- energy_data %>% left_join(select(variables,-id),by="name") %>%
 energy_data_spread <- energy_data %>% spread(key=key,value=value)
 ```
 
-This is an overview of the variables and their English version
+This is an overview of the variables (*name*) and their English version (*key*)
+
 ``` {r variables, echo=FALSE}
 variables %>% kable()
 ```
 
 The dataset is then spread into a train set (*model_data*), consisting of the years 2014-2017, and the test set (*test_data*) containing year 2018 data. The goal is to train a model on the initial 4 years and test it on the last one. Any further data exploration and model training will solely use the train set.
-```{r train and test set}
+
+```{r train_test_set}
 ### Use year 2018 as test model
 model_data <- energy_data_spread %>% filter(year!=2018)
 test_data <- energy_data_spread %>% filter(year==2018)
 ```
 
+## Data Analysis
 Since the objective is to predict the Spanish spot market prices, the average price for years 2014-2017 was calculated in a first step.
+
 ```{r mean_price, echo=FALSE}
 ### Calculate mean spot price by country
 mean_price <- model_data %>% 
@@ -131,16 +139,10 @@ mean_price <- model_data %>%
             mean_price_POR=mean(spot_price_POR))
 
 mean_price %>% kable()
-
-### Calculate error in train set using naive method
-RMSE_model <- data.frame(method="naive",
-                              accuracy=RMSE(mean_price$mean_price_ESP,
-                                            model_data$spot_price_ESP))
 ```
 
-Using the mean price as prediction for the electricity price in the train set leads to a RMSE of `r round(RMSE_model[1,2],1)`. 
-
-Looking at the graphical representation of the price development in years 2014-2017 you can rather see a seasonal pattern, with a positive trend.
+## Correlation to Months and Weekdays
+Looking at the graphical representation of the price development in years 2014-2017 you can rather see a seasonal pattern, with a positive trend. Also you can see that Spain and Portugal seem to have closely connected electricity markets.
 
 ```{r price_development, echo=FALSE}
 model_data %>% 
@@ -149,9 +151,297 @@ model_data %>%
   geom_point(aes(color=market))
 ```
 
+To understand the seasonality better possible patterns by month or by weekday were checked. The two box plots below show electricity prices from 2014 to 2017 by month and weekday. The price ranges are shown for Spain, Portugal and France to understand similarities and differences between markets.
+
+It can be seen that electricity prices in Spain and Portugal are significantly lower in spring, from February to May. In France the lowest prices can be seen in spring and summer, from March to September.
+
+```{r monthly_bias, echo=FALSE, message=FALSE, warning=FALSE}
+### Show boxplot of spot prices by month and country (monthly bias)
+model_data %>%
+  gather(key=market,value=value,spot_price_ESP,spot_price_FRA,spot_price_POR) %>%
+  mutate(month=as.factor(month)) %>% 
+  group_by(month,market) %>% 
+  ggplot(aes(month, value)) +
+  geom_boxplot() +
+  ylim(0,100) +
+  facet_wrap(~market)
+```
+
+Looking at the price differences by weekday it can be seen that prices are relatively constant during the week but drop on Saturday and even more on Sunday. This trend seems to be similar for all three markets.
+
+```{r daily_bias, echo=FALSE, message=FALSE, warning=FALSE}
+### Show boxplot of spot prices by weekday and country (weekday bias)
+model_data %>%
+  gather(key=market,value=value,spot_price_ESP,spot_price_FRA,spot_price_POR) %>%
+  mutate(wday=as.factor(wday)) %>% 
+  group_by(wday,market) %>% 
+  ggplot(aes(wday, value)) +
+  geom_boxplot() +
+  ylim(0,100) +
+  facet_wrap(~market)
+```
+
+## Correlation to Energy Sources
+Not surpringly the electricity price also shows a strong correlation to the volume that different energy sources are contributing to the energy mix. The strongest correlation can be seen to coal and wind.
+
+Wind energy has a negative correlation to the electricity price. The more wind energy is available, the lower the electricity price will be.
+
+```{r wind_energy, echo=FALSE, message=FALSE, warning=FALSE}
+model_data %>% ggplot(aes(plan_coal,spot_price_ESP)) +
+  geom_point(aes(color=as.factor(year))) +
+  geom_smooth() +
+  ylim(0,100)
+```
+
+Coal energy has a positive correlation to the electricity price. The more coal energy is produced the higher the electricity price will be. It can be assumed that coal energy is produced whenever less cheap wind energy is available, which will be offered at very low prices if needed, since to fuel is needed. 
+
+```{r coal_energy, echo=FALSE, message=FALSE, warning=FALSE}
+model_data %>% ggplot(aes(plan_wind,spot_price_ESP)) +
+  geom_point(aes(color=as.factor(year))) +
+  geom_smooth() +
+  ylim(0,100)
+```
+
+This assumption can be confirmed by looking at the correlation values between the electricity spot price and the different energy sources. As expected, there is a strong positive correlation between the spot price and the coal energy production, and a negative correlation to wind energy and reverse hydro energy, e.g. energy from storage. Also there is a negative correlation between coal on one hand and wind and reverse hydro on the other. Whenever a lot of wind energy and reverse hydro energy is available, little coal energy is planned.
+
+```{r energy_correlation}
+### Calculate correlation betwwen energy sources and to spot prices
+model_data <- model_data %>% mutate(plan_renewables_total=plan_hydro+plan_pv+plan_wind)
+
+impact_generation <- model_data %>% select(spot_price_ESP,
+                                           plan_coal,plan_combicycle,
+                                           plan_gas,plan_hydro,
+                                           plan_nuclear,plan_pv,
+                                           plan_reverse_hydro,plan_wind,
+                                           plan_renewables_total) %>%
+  cor(use="complete.obs")
+
+corrplot(impact_generation, type="upper", order="original",
+         col=brewer.pal(n=8, name="RdYlBu"))
+```
+
+## Training of Prediction Model
+Using our initial findings a prediction algorithm is trained on the train set.
+
+```{r naive_train, echo=FALSE}
+### Calculate error in train set using naive method
+RMSE_model <- data.frame(method="naive",
+                              accuracy_train=RMSE(mean_price$mean_price_ESP,
+                                            model_data$spot_price_ESP))
+```
+
+### Regression Line
+In a first step a simple regression model is trained on the train set. Representing a the regression line together with the electricity prices in a scatter plot, shows that a general positive trend is reflected but seasonal effects lead to strong errors in the prediction.
+
+```{r regression_train}
+### Calculate regression line through spot prices
+regline <- model_data %>% lm(spot_price_ESP~datetime, data=.)
+
+model_data <- model_data %>% mutate(price_regline=predict(regline,newdata=.))
+```
+
+```{r regression_RMSE, echo=FALSE, message=FALSE, warning=FALSE}
+### Show regression line in scatter plot of spot prices
+model_data %>% 
+  ggplot(aes(datetime, spot_price_ESP)) +
+  geom_point() +
+  geom_line(aes(datetime,price_regline), col="blue")
+
+### Calculate error in train set using regression line
+RMSE_model <- rbind(RMSE_model,
+                         data.frame(method="regline",
+                                    accuracy_train=RMSE(model_data$price_regline,
+                                                  model_data$spot_price_ESP)))
+```
+
+### Trend Decomposition
+In a second step a seasonal pattern is added to the regression line. The average error between the regression line and the actual electricity price is calculated by month (*bias_w*). This monthly "bias" is added to the prediction. The same was done for calendar weeks (*bias_m*) and weekdays (*bias_d*). The graph above shows the predicted prices for the regression line in combination with the monthly bias and the bias by weekday. It follows the actual electricity prices already much closer than the regression line alone.
+
+```{r monthly_bias_train}
+### Calculate monthly bias (delta to regression line)
+bias_month <- model_data %>% group_by(month) %>% 
+  summarise(bias_m=mean(spot_price_ESP-price_regline,na.rm=TRUE))
+
+model_data <- model_data %>% left_join(bias_month, by="month") %>%
+  mutate(price_month=price_regline+bias_m)
+```
+
+```{r weekly_daily_bias_train, echo=FALSE, message=FALSE, warning=FALSE}
+### Calculate error in train set using regression line plus monthly bias
+RMSE_model <- rbind(RMSE_model,
+                    data.frame(method="regline+monthly bias",
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
+                                             model_data$price_month)))
+
+### Calculate bias by calendar week
+bias_week <- model_data %>% group_by(week) %>% 
+  summarise(bias_w=mean(spot_price_ESP-price_regline,na.rm=TRUE))
+
+model_data <- model_data %>% left_join(bias_week, by="week") %>%
+  mutate(price_week=price_regline+bias_w)
+
+### Calculate error in train set using regression line plus weekly bias
+RMSE_model <- rbind(RMSE_model,
+                    data.frame(method="regline+bias by calendar week",
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
+                                             model_data$price_week)))
+
+### Calculate bias by weekday
+bias_wday <- model_data %>% group_by(wday) %>% 
+  summarise(bias_d=mean(spot_price_ESP-price_month,na.rm=TRUE))
+
+model_data <- model_data %>% left_join(bias_wday, by="wday") %>%
+  mutate(price_wday=price_regline+bias_m+bias_d)
+
+### Calculate error in train set using regression line plus monthly amd daily bias
+RMSE_model <- rbind(RMSE_model,
+                    data.frame(method="regline+monthly and daily bias",
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
+                                             model_data$price_wday)))
+
+### Show predicted prices in scatter plot of spot prices
+model_data %>% 
+  ggplot(aes(datetime, spot_price_ESP)) +
+  geom_point() +
+  geom_line(aes(datetime,price_wday),col="blue")
+```
+
+To understand the remaining error below graph shows the error for the years 2014-2017. There seem to be some general trends that are not reflected yet. Since the upward and downward trends have different duration, it might be difficult to include these in a seasonal pattern, though.
+
+```{r prediction_error, echo=FALSE, message=FALSE, warning=FALSE}
+### Show differences between spot prices and predicted prices
+model_data %>% mutate(price_error=price_wday-spot_price_ESP) %>% 
+  ggplot(aes(datetime, price_error)) +
+  geom_point() +
+  geom_smooth()
+```
+
+### Holt Winters Method
+A second method was applied to check if a higher prediction accuracy could be achieved. The Holt Winters method decomposes the data into the general level, a (linear) trend and a seasonal pattern. It uses exponential smoothing, thus putting higher weighing on recent data. To use Holt Winters' method the electricity prices needed to be converted into a time series object first, with a frequency of 12 (monthly). The calculation is calculating the weighted average and already generates the prediction for 12 months ahead, i.e. the year 2018. 
+
+Following graph shows the smoothing curve through years 2014 to 2017 and the prediction for 2018. The blue area shows the confidence intervall for the prediction.
+
+```{r hw_train}
+# Calculate average spot price by month
+spot_price_ESP <- model_data %>% group_by(year,month) %>% 
+  summarize(spot_price_ESP=mean(spot_price_ESP))
+
+# Convert spot prices into time series
+ts_price_ESP <- ts(spot_price_ESP[,3], frequency=12, start=c(2014,1))
+
+# Calculate Holt Winters model, including forecast for 2018
+ts_price_hw <- hw(ts_price_ESP, h=12, seasonal="additive")
+```
+
+```{r hw_graph, echo=FALSE, message=FALSE, warning=FALSE}
+autoplot(ts_price_ESP) +
+  autolayer(ts_price_hw)
+```
+
+The time series is then converted back into a data frame. And the bias by weekday (*bias_d*) is added to it, since the Holt Winters method only considers a monthly frequency to identify patterns. Following graph compares the regression line combined with monthly and daily bias (blue) to the Holt Winters smoothing curve combined with daily bias. It can be seen that the smoothing curve follows the actual electricity prices closer in the train set. The question is which method will predict the prices better in the test set.
+
+```{r prediction_train, echo=FALSE, message=FALSE, warning=FALSE}
+# Convert prices from Holt Winters into data frame for train period and forecast (test)
+price_hw_model <- data.frame(date=as.Date(yearmon(time(ts_price_hw$x))),
+                       price_hw=matrix(ts_price_hw$x)) %>%
+  mutate(year=year(date),month=month(date)) %>% 
+  select(-date)
+
+price_hw_test <- data.frame(date=as.Date(yearmon(time(ts_price_hw$mean))),
+                             price_hw=matrix(ts_price_hw$mean)) %>%
+  mutate(year=year(date),month=month(date)) %>%
+  select(-date)
+
+model_data <- model_data %>% left_join(price_hw_model,by=c("year","month"))
+
+### Calculate error in train set using Holt Winters method
+RMSE_model <- rbind(RMSE_model,
+                    data.frame(method="hw by month",
+                               accuracy_train=RMSE(model_data$price_hw,
+                                             model_data$spot_price_ESP)))
+
+### Add bias by weekday on top of Holt Winters
+model_data <- model_data %>% mutate(price_hw_wday=price_hw+bias_d)
+
+### Calculate error in train set using Holt Winters method plus daily bias
+RMSE_model <- rbind(RMSE_model,
+                    data.frame(method="hw by month+daily bias",
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
+                                             model_data$price_hw_wday)))
+
+### Show difference between regrssion line plus monthly bias and Holt Winters method
+model_data %>% 
+  ggplot(aes(datetime, spot_price_ESP)) +
+  geom_point() +
+  geom_line(aes(datetime,price_wday),col="blue") +
+  geom_line(aes(datetime,price_hw_wday),col="red")
+```
+
 
 # Results
 ## A results section that presents the modeling results and discusses the model performance.
-                        
+```{r prediction_test, echo=FALSE}
+### Calculate error in test set using naive method
+RMSE_test <- data.frame(method="naive",
+                            accuracy_test=RMSE(test_data$spot_price_ESP,
+                                          mean_price$mean_price_ESP))
+
+### Calculate error in test set using regression line
+test_data <- test_data %>% mutate(price_regline=predict(regline,newdata=.))
+
+RMSE_test <- rbind(RMSE_test,
+                data.frame(method="regline",
+                           accuracy_test=RMSE(test_data$price_regline,
+                                         test_data$spot_price_ESP)))
+
+### Calculate error in test set using regression line plus monthly bias
+test_data <- test_data %>% left_join(bias_month, by="month") %>%
+  mutate(price_month=price_regline+bias_m)
+
+RMSE_test <- rbind(RMSE_test,
+                       data.frame(method="regline+monthly bias",
+                                  accuracy_test=RMSE(test_data$price_month,
+                                                test_data$spot_price_ESP)))
+
+### Calculate error in test set using regression line plus weekly bias
+test_data <- test_data %>% left_join(bias_week, by="week") %>%
+  mutate(price_week=price_regline+bias_w)
+
+RMSE_test <- rbind(RMSE_test,
+                         data.frame(method="regline+bias by calendar week",
+                                    accuracy_test=RMSE(test_data$price_week,
+                                                  test_data$spot_price_ESP)))
+
+### Calculate error in test set using regression line plus monthly amd daily bias
+test_data <- test_data %>% left_join(bias_wday, by="wday") %>%
+  mutate(price_wday=price_regline+bias_m+bias_d)
+
+RMSE_test <- rbind(RMSE_test,
+                       data.frame(method="regline+monthly and daily bias",
+                                  accuracy_test=RMSE(test_data$price_wday,
+                                                test_data$spot_price_ESP)))
+
+### Calculate error in test set using Holt Winters method
+test_data <- test_data %>% left_join(price_hw_test,by=c("year","month"))
+
+RMSE_test <- rbind(RMSE_test,
+                    data.frame(method="hw by month",
+                               accuracy_test=RMSE(test_data$price_hw,
+                                             test_data$spot_price_ESP)))
+
+### Calculate error in test set using Holt Winters method plus monthly bias
+test_data <- test_data %>% mutate(price_hw_wday=price_hw+bias_d)
+
+RMSE_test <- rbind(RMSE_test,
+                    data.frame(method="hw by month+daily bias",
+                               accuracy_test=RMSE(test_data$spot_price_ESP,
+                                             test_data$price_hw_wday)))
+
+### Get final table with RMSE for train and test set
+RMSE_final <- RMSE_model %>% left_join(RMSE_test, by="method")
+
+RMSE_final %>% kable()
+```
+
 # Conclusion 
 ## A conclusion section that gives a brief summary of the report, its potential impact, its limitations, and future work.

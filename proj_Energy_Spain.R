@@ -104,7 +104,7 @@ print(mean_price)
 
 ### Calculate error in train set using naive method
 RMSE_model <- data.frame(method="naive",
-                              accuracy=RMSE(mean_price$mean_price_ESP,
+                              accuracy_train=RMSE(mean_price$mean_price_ESP,
                                             model_data$spot_price_ESP))
 
 ### Show development of spot prices over time
@@ -204,7 +204,7 @@ model_data %>%
 ### Calculate error in train set using regression line
 RMSE_model <- rbind(RMSE_model,
                          data.frame(method="regline",
-                                    accuracy=RMSE(model_data$price_regline,
+                                    accuracy_train=RMSE(model_data$price_regline,
                                                   model_data$spot_price_ESP)))
 
 ### Calculate monthly bias (delta to regression line)
@@ -217,7 +217,7 @@ model_data <- model_data %>% left_join(bias_month, by="month") %>%
 ### Calculate error in train set using regression line plus monthly bias
 RMSE_model <- rbind(RMSE_model,
                     data.frame(method="regline+monthly bias",
-                               accuracy=RMSE(model_data$spot_price_ESP,
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
                                              model_data$price_month)))
 
 ### Calculate bias by calendar week
@@ -230,7 +230,7 @@ model_data <- model_data %>% left_join(bias_week, by="week") %>%
 ### Calculate error in train set using regression line plus weekly bias
 RMSE_model <- rbind(RMSE_model,
                     data.frame(method="regline+bias by calendar week",
-                               accuracy=RMSE(model_data$spot_price_ESP,
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
                                              model_data$price_week)))
 
 ### Calculate bias by weekday
@@ -243,7 +243,7 @@ model_data <- model_data %>% left_join(bias_wday, by="wday") %>%
 ### Calculate error in train set using regression line plus monthly amd daily bias
 RMSE_model <- rbind(RMSE_model,
                     data.frame(method="regline+monthly and daily bias",
-                               accuracy=RMSE(model_data$spot_price_ESP,
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
                                              model_data$price_wday)))
 
 ### Show predicted prices in scatter plot of spot prices
@@ -288,7 +288,7 @@ model_data <- model_data %>% left_join(price_hw_model,by=c("year","month"))
 ### Calculate error in train set using Holt Winters method
 RMSE_model <- rbind(RMSE_model,
                     data.frame(method="hw by month",
-                               accuracy=RMSE(model_data$price_hw,
+                               accuracy_train=RMSE(model_data$price_hw,
                                              model_data$spot_price_ESP)))
 
 ### Add bias by weekday on top of Holt Winters
@@ -297,7 +297,7 @@ model_data <- model_data %>% mutate(price_hw_wday=price_hw+bias_d)
 ### Calculate error in train set using Holt Winters method plus daily bias
 RMSE_model <- rbind(RMSE_model,
                     data.frame(method="hw by month+daily bias",
-                               accuracy=RMSE(model_data$spot_price_ESP,
+                               accuracy_train=RMSE(model_data$spot_price_ESP,
                                              model_data$price_hw_wday)))
 
 ### Show difference between regrssion line plus monthly bias and Holt Winters method
@@ -313,7 +313,7 @@ model_data %>%
 RMSE(test_data$spot_price_ESP,mean_price$mean_price_ESP)
 
 RMSE_test <- data.frame(method="naive",
-                            accuracy=RMSE(test_data$spot_price_ESP,
+                            accuracy_test=RMSE(test_data$spot_price_ESP,
                                           mean_price$mean_price_ESP))
 
 ### Calculate error in test set using regression line
@@ -321,7 +321,7 @@ test_data <- test_data %>% mutate(price_regline=predict(regline,newdata=.))
 
 RMSE_test <- rbind(RMSE_test,
                 data.frame(method="regline",
-                           accuracy=RMSE(test_data$price_regline,
+                           accuracy_test=RMSE(test_data$price_regline,
                                          test_data$spot_price_ESP)))
 
 ### Calculate error in test set using regression line plus monthly bias
@@ -330,7 +330,7 @@ test_data <- test_data %>% left_join(bias_month, by="month") %>%
 
 RMSE_test <- rbind(RMSE_test,
                        data.frame(method="regline+monthly bias",
-                                  accuracy=RMSE(test_data$price_month,
+                                  accuracy_test=RMSE(test_data$price_month,
                                                 test_data$spot_price_ESP)))
 
 ### Calculate error in test set using regression line plus weekly bias
@@ -339,7 +339,7 @@ test_data <- test_data %>% left_join(bias_week, by="week") %>%
 
 RMSE_test <- rbind(RMSE_test,
                          data.frame(method="regline+bias by calendar week",
-                                    accuracy=RMSE(test_data$price_week,
+                                    accuracy_test=RMSE(test_data$price_week,
                                                   test_data$spot_price_ESP)))
 
 ### Calculate error in test set using regression line plus monthly amd daily bias
@@ -348,7 +348,7 @@ test_data <- test_data %>% left_join(bias_wday, by="wday") %>%
 
 RMSE_test <- rbind(RMSE_test,
                        data.frame(method="regline+monthly and daily bias",
-                                  accuracy=RMSE(test_data$price_wday,
+                                  accuracy_test=RMSE(test_data$price_wday,
                                                 test_data$spot_price_ESP)))
 
 ### Calculate error in test set using Holt Winters method
@@ -356,7 +356,7 @@ test_data <- test_data %>% left_join(price_hw_test,by=c("year","month"))
 
 RMSE_test <- rbind(RMSE_test,
                     data.frame(method="hw by month",
-                               accuracy=RMSE(test_data$price_hw,
+                               accuracy_test=RMSE(test_data$price_hw,
                                              test_data$spot_price_ESP)))
 
 ### Calculate error in test set using Holt Winters method plus monthly bias
@@ -364,8 +364,11 @@ test_data <- test_data %>% mutate(price_hw_wday=price_hw+bias_d)
 
 RMSE_test <- rbind(RMSE_test,
                     data.frame(method="hw by month+daily bias",
-                               accuracy=RMSE(test_data$spot_price_ESP,
+                               accuracy_test=RMSE(test_data$spot_price_ESP,
                                              test_data$price_hw_wday)))
+
+### Get final table with RMSE for train and test set
+RMSE_final <- RMSE_model %>% left_join(RMSE_test, by="method")
 
 ### Show difference between regression line plus monthly bias and Holt Winters method
 test_data %>% 
